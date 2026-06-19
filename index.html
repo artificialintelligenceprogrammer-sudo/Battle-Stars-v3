@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>배틀 스타즈 FPS - Sky Battle</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #87CEEB;
+            user-select: none;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* FPS Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 24px;
+            height: 24px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 20;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 0, 0, 0.9);
+        }
+        #crosshair::before { top: 11px; left: 0; width: 24px; height: 2px; }
+        #crosshair::after { top: 0; left: 11px; width: 2px; height: 24px; }
+
+        /* Hit Marker */
+        #hit-marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 30px;
+            height: 30px;
+            transform: translate(-50%, -50%) rotate(45deg);
+            pointer-events: none;
+            z-index: 21;
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+        #hit-marker::before, #hit-marker::after {
+            content: '';
+            position: absolute;
+            background: #fff;
+        }
+        #hit-marker::before { top: 14px; left: 0; width: 30px; height: 2px; }
+        #hit-marker::after { top: 0; left: 14px; width: 2px; height: 30px; }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            font-family: 'Black Han Sans', sans-serif;
+            text-shadow: 2px 2px 0 #000;
+            color: white;
+            font-size: 24px;
+            align-items: center;
+        }
+
+        .score-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .team-score { color: #4facfe; }
+        .enemy-score { color: #ff5e62; }
+
+        .hud-bottom {
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            position: relative;
+        }
+
+        .weapon-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            display: flex;
+            gap: 10px;
+            color: white;
+            pointer-events: auto;
+        }
+
+        .weapon-slot {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid #555;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .weapon-slot.active {
+            border-color: #ffd700;
+            background: rgba(255, 215, 0, 0.3);
+            transform: scale(1.1);
+        }
+
+        .health-bar-container {
+            width: 350px;
+            height: 35px;
+            background: #222;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 3px solid white;
+            position: relative;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #00b09b, #96c93d);
+            transition: width 0.2s;
+        }
+
+        #health-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        #ai-level-badge {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            color: #ffd700;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            border: 1px solid #ffd700;
+            font-family: 'Black Han Sans', sans-serif;
+            font-size: 18px;
+        }
+
+        /* Minimap */
+        #minimap-container {
+            width: 150px;
+            height: 150px;
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            margin-left: 20px;
+        }
+        #minimap {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #87CEEB 0%, #4682B4 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            color: white;
+            z-index: 100;
+        }
+
+        #main-menu-content {
+            display: flex;
+            flex-direction: row;
+            width: 85%;
+            max-width: 1200px;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 101;
+        }
+
+        .menu-side {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 320px;
+            background: rgba(0,0,0,0.25);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #character-preview-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #character-preview {
+            width: 400px;
+            height: 500px;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 {
+            font-family: 'Black Han Sans', sans-serif;
+            font-size: 50px;
+            margin: 0;
+            background: linear-gradient(to bottom, #fff, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.5));
+            text-align: center;
+        }
+
+        .trophy-display {
+            font-size: 32px;
+            color: #ffd700;
+            font-family: 'Black Han Sans', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .rank-label {
+            font-size: 18px;
+            color: #ddd;
+            text-align: center;
+            margin-top: -5px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            border: none;
+            padding: 15px 30px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Black Han Sans', sans-serif;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            border-bottom: 5px solid #0a7a6e;
+            text-align: center;
+            width: 100%;
+        }
+
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 12px 25px rgba(0,0,0,0.5); }
+        .btn:active { transform: translateY(3px); border-bottom-width: 0; }
+
+        #msg-log {
+            position: absolute;
+            top: 120px;
+            right: 20px;
+            text-align: right;
+            pointer-events: none;
+            width: 300px;
+        }
+        .kill-msg {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 8px;
+            background: rgba(0,0,0,0.4);
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        #controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 20px;
+            border-radius: 20px;
+        }
+
+        /* Settings Gear Button */
+        .settings-gear-btn {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            z-index: 120;
+            transition: all 0.25s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+        }
+        .settings-gear-btn:hover {
+            transform: rotate(90deg) scale(1.1);
+            background: rgba(0, 0, 0, 0.8);
+            border-color: #ffd700;
+        }
+
+        /* Profile & Custom Skin in Settings Modal */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+        }
+        .input-group label {
+            color: #ffd700;
+            font-size: 15px;
+            font-weight: bold;
+            font-family: 'Black Han Sans', sans-serif;
+        }
+        #player-name-input {
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.4);
+            color: white;
+            font-family: 'Noto Sans KR', sans-serif;
+            font-weight: bold;
+            text-align: center;
+            font-size: 16px;
+        }
+        .skin-selector {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 5px;
+        }
+        .skin-option {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .skin-option:hover { transform: scale(1.15); }
+        .skin-option.selected {
+            border-color: #ffd700;
+            transform: scale(1.25);
+            box-shadow: 0 0 12px #ffd700;
+        }
+
+        /* Custom Scrollbar for Roadmap list */
+        #roadmap-track::-webkit-scrollbar {
+            width: 6px;
+        }
+        #roadmap-track::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+        #roadmap-track::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    <div id="crosshair"></div>
+    <div id="hit-marker"></div>
+    
+    <!-- 2D Damage Text Overlay Canvas/Container -->
+    <div id="damage-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; overflow: hidden;"></div>
+
+    <!-- 설정 버튼 (상시 메인화면/게임 대기중 접근 가능) -->
+    <button id="settings-btn" class="settings-gear-btn" onclick="openSettings()">⚙️</button>
+
+    <div id="ui-layer" class="hidden">
+        <div class="hud-top">
+            <div class="score-box" id="left-score-box">
+                <span id="score-label">우리팀</span>: <span id="my-score" class="team-score">0</span>
+            </div>
+            <div class="score-box" id="timer-box">
+                <span id="timer">02:00</span>
+            </div>
+            <div class="score-box" id="right-score-box">
+                <span id="enemy-label">적팀</span>: <span id="enemy-score" class="enemy-score">0</span>
+            </div>
+            <!-- 연습장 탈출용 버튼 (연습장 플레이 시에만 visible) -->
+            <button id="quit-practice-btn" class="btn hidden" style="width: auto; padding: 10px 24px; font-size: 16px; margin: 0; background: linear-gradient(135deg, #e74c3c, #c0392b); border-bottom: 3px solid #7f0000; pointer-events: auto; z-index: 50;" onclick="quitPractice()">연습 종료</button>
+        </div>
+
+        <div id="ai-level-badge">AI LEVEL: 1 (아이언)</div>
+        <div id="msg-log"></div>
+
+        <div class="hud-bottom">
+            <div class="health-bar-container">
+                <div id="health-bar"></div>
+                <div id="health-text">100 / 100</div>
+            </div>
+            <div class="weapon-panel">
+                <div class="weapon-slot" id="slot-pistol">🔫 권총<br>∞</div>
+                <div class="weapon-slot active" id="slot-ak">🔫 AK-47<br><span id="ammo-ak">45</span></div>
+                <div class="weapon-slot" id="slot-cannon" style="border-color: #ff4444; color: #ffaaaa; opacity: 0.5;">💣 대포<br><span id="ammo-cannon">0</span></div>
+            </div>
+            <!-- Minimap -->
+            <div id="minimap-container">
+                <canvas id="minimap" width="150" height="150"></canvas>
+            </div>
+        </div>
+        <div id="controls-hint">Enter: 점프 | Space: 발사 | WASD: 이동 | 1,2,3: 무기교체</div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="screen">
+        <div id="main-menu-content">
+            <div class="menu-side">
+                <h1>BATTLE STARS</h1>
+                <div class="trophy-display">
+                    <span>🏆</span> <span id="menu-trophies">0</span>
+                </div>
+                <div id="rank-name" class="rank-label">아이언</div>
+                <hr style="width: 100%; border: 0.5px solid rgba(255,255,255,0.2);">
+                <div style="font-size: 14px; color: #eee; line-height: 1.6; text-align: center; margin-top: 10px;">
+                    하늘 위 펼쳐지는 대전장에서 벌어지는 치열한 사투! 무기를 적절히 교체하여 적들을 처치하고 랭킹을 높이세요.
+                </div>
+            </div>
+
+            <!-- 머리위 트로피, 발아래 이름 추가 구조 -->
+            <div id="character-preview-container">
+                <div id="preview-trophies-above" style="font-family: 'Black Han Sans', sans-serif; font-size: 26px; color: #ffd700; text-shadow: 2px 2px 0 #000; margin-bottom: -15px; z-index: 10; pointer-events: none;">🏆 0</div>
+                <div id="character-preview">
+                    <!-- 3D Preview inside -->
+                </div>
+                <div id="preview-name-below" style="font-family: 'Black Han Sans', sans-serif; font-size: 24px; color: white; text-shadow: 2px 2px 0 #000; margin-top: -35px; z-index: 10; pointer-events: none;">플레이어</div>
+            </div>
+
+            <div class="menu-side" style="gap: 12px;">
+                <button class="btn" style="background: linear-gradient(135deg, #2193b0, #6dd5ed);" onclick="startGame('TEAM')">팀 데스매치</button>
+                <button class="btn" style="background: linear-gradient(135deg, #cc2b5e, #753a88);" onclick="startGame('SOLO')">개인전 (배틀로얄)</button>
+                <button class="btn" style="background: linear-gradient(135deg, #f1c40f, #f39c12); border-bottom: 5px solid #a06e0a;" onclick="startGame('PRACTICE')">🎯 훈련소 (연습장)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings & Roadmap Modal -->
+    <div id="settings-modal" class="screen hidden" style="z-index: 200; background: rgba(15, 20, 30, 0.95); overflow-y: auto; padding: 40px 20px;">
+        <div style="max-width: 650px; width: 100%; margin: auto; background: rgba(0,0,0,0.5); padding: 30px; border-radius: 24px; border: 2px solid rgba(255,255,255,0.1); position: relative; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <button style="position: absolute; top: 15px; right: 20px; background: none; border: none; color: white; font-size: 32px; cursor: pointer;" onclick="closeSettings()">×</button>
+            
+            <h2 style="font-family: 'Black Han Sans', sans-serif; font-size: 32px; text-align: center; margin-bottom: 25px; color: #ffd700; text-shadow: 1px 1px 4px rgba(0,0,0,0.5);">⚙️ 설정 및 랭크 로드맵</h2>
+            
+            <!-- Profile Info in Modal -->
+            <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 30px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px;">
+                <div class="input-group">
+                    <label>플레이어 닉네임</label>
+                    <input type="text" id="player-name-input" placeholder="이름을 입력하세요" maxlength="8" oninput="saveProfile()">
+                </div>
+                <div class="input-group">
+                    <label>캐릭터 스킨 선택</label>
+                    <div class="skin-selector">
+                        <div class="skin-option" data-color="#ff4444" style="background: #ff4444;" onclick="selectSkin('red', 0xff4444)"></div>
+                        <div class="skin-option" data-color="#4444ff" style="background: #4444ff;" onclick="selectSkin('blue', 0x4444ff)"></div>
+                        <div class="skin-option" data-color="#2ecc71" style="background: #2ecc71;" onclick="selectSkin('green', 0x2ecc71)"></div>
+                        <div class="skin-option" data-color="#9b59b6" style="background: #9b59b6;" onclick="selectSkin('purple', 0x9b59b6)"></div>
+                        <div class="skin-option" data-color="#f1c40f" style="background: #f1c40f;" onclick="selectSkin('yellow', 0xf1c40f)"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Roadmap Title -->
+            <h3 style="font-family: 'Black Han Sans', sans-serif; font-size: 22px; color: white; margin-bottom: 12px; border-left: 5px solid #ffd700; padding-left: 10px;">🏆 트로피 랭킹 로드맵</h3>
+            
+            <!-- Progress Info -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; font-size: 15px;">
+                <span>현재 랭크: <span id="modal-current-rank" style="color: #ffd700;">아이언</span></span>
+                <span>🏆 <span id="modal-current-trophies">0</span> 개</span>
+            </div>
+
+            <!-- Progress bar -->
+            <div style="width: 100%; height: 16px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 25px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2);">
+                <div id="roadmap-progress-bar" style="height: 100%; background: linear-gradient(90deg, #ffd700, #ff4444); width: 0%; transition: width 0.4s ease-out;"></div>
+            </div>
+
+            <!-- Rank List Container -->
+            <div id="roadmap-track" style="display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; padding-right: 5px; margin-bottom: 25px;">
+                <!-- Ranks will dynamically insert here -->
+            </div>
+
+            <div style="text-align: center;">
+                <button class="btn" style="width: auto; padding: 10px 40px; font-size: 18px;" onclick="closeSettings()">확인 및 닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-over" class="screen hidden">
+        <div style="text-align: center;">
+            <h1 id="result-title">게임 종료</h1>
+            <div class="trophy-display" style="justify-content: center; margin: 20px 0;">
+                <span id="trophy-change">+10</span> 🏆
+            </div>
+            <div id="result-details" style="margin-bottom: 30px; font-size: 24px; color: #ddd;"></div>
+            <button class="btn" onclick="showMainMenu()">메인 화면으로</button>
+        </div>
+    </div>
+
+    <script>
+        const CONST = {
+            PLAYER_SPEED: 0.32,
+            AI_SPEED: 0.224, // 플레이어의 70% 기본 베이스
+            JUMP_FORCE: 0.45,
+            GRAVITY: 0.018,
+            CANNON_AMMO: 5,
+            AK_AMMO: 45,
+            PLAYER_HP: 100,
+            COLORS: {
+                PLAYER: 0x2ecc71,
+                TEAMMATE: 0x3498db,
+                ENEMY: 0xe74c3c,
+                GROUND: 0x555555,
+                WALL: 0x808080,
+                SKY: 0x87CEEB
+            }
+        };
+
+        let state = {
+            mode: 'TEAM',
+            trophies: parseInt(localStorage.getItem('rank_trophies') || 0),
+            isPlaying: false,
+            timeLeft: 120, // 팀데스매치 60초 감소 적용 (180초 -> 120초)
+            scores: { blue: 0, red: 0 },
+            aliveCount: 10,
+            myRank: 0,
+            player: null,
+            timerId: null,
+            aiLevel: 1,
+            playerName: localStorage.getItem('battle_username') || "플레이어",
+            skinColor: parseInt(localStorage.getItem('battle_skin_color')) || 0x2ecc71
+        };
+
+        // Screen Shake and Juice Properties
+        let screenShake = 0;
+        let floatingTexts = []; // { el, pos, velY, life, maxLife }
+        
+        // 랭크 구조 리워크 (0~10: 아이언, 11~50: 브론즈, 51~150: 실버, 151~250: 골드, 251~350: 레전드, 351~500: 마스터, 501~700: 플래티넘, 701+: 얼티밋)
+        const RANKS_CONFIG = [
+            { name: "아이언", min: 0, max: 10, color: "#a0aec0", desc: "전투 훈련이 필요한 초심자" },
+            { name: "브론즈", min: 11, max: 50, color: "#cd7f32", desc: "기본적인 무기 사용법을 익힌 상태" },
+            { name: "실버", min: 51, max: 150, color: "#cbd5e0", desc: "전장의 흐름을 파악하기 시작한 용사" },
+            { name: "골드", min: 151, max: 250, color: "#ecc94b", desc: "에이스로 거듭난 훌륭한 사수" },
+            { name: "레전드", min: 251, max: 350, color: "#f56565", desc: "영웅적인 활약상으로 명성을 떨친 전사" },
+            { name: "마스터", min: 351, max: 500, color: "#b794f4", desc: "모든 병기를 능숙하게 통제하는 사령관" },
+            { name: "플래티넘", min: 501, max: 700, color: "#4299e1", desc: "전설을 구축한 최고 실력의 군주" },
+            { name: "얼티밋", min: 701, max: 99999, color: "#319795", desc: "어떤 적도 두렵지 않은 전장의 절대자" }
+        ];
+
+        // 초기값 UI 바인딩
+        document.getElementById('player-name-input').value = state.playerName;
+
+        function getRankInfo(t) {
+            for (let i = 0; i < RANKS_CONFIG.length; i++) {
+                const config = RANKS_CONFIG[i];
+                if (t >= config.min && t <= config.max) {
+                    return { ...config, level: i + 1 };
+                }
+            }
+            return { name: "얼티밋", min: 701, max: 99999, color: "#319795", desc: "전장의 절대자", level: 8 };
+        }
+
+        function saveProfile() {
+            const name = document.getElementById('player-name-input').value;
+            if(name) {
+                state.playerName = name;
+                localStorage.setItem('battle_username', name);
+                document.getElementById('preview-name-below').innerText = name;
+            }
+        }
+
+        function selectSkin(name, hex) {
+            state.skinColor = hex;
+            localStorage.setItem('battle_skin_color', hex);
+
+            document.querySelectorAll('.skin-option').forEach(el => el.classList.remove('selected'));
+            const selector = document.querySelector(`.skin-option[data-color="${hex === 0x2ecc71 ? '#2ecc71' : '#' + hex.toString(16)}"]`);
+            if (selector) selector.classList.add('selected');
+
+            updatePreviewColor();
+        }
+
+        function getAIStats() {
+            const t = state.trophies;
+            const rank = getRankInfo(t);
+            state.aiLevel = rank.level;
+
+            const el = document.getElementById('ai-level-badge');
+            if(el) el.innerText = `AI LEVEL: ${state.aiLevel} (${rank.name})`;
+            
+            const rankEl = document.getElementById('rank-name');
+            if(rankEl) {
+                rankEl.innerText = rank.name;
+                rankEl.style.color = rank.color;
+            }
+
+            // 트로피/랭크 단계 상승 시 AI 능력 가중치 점진 증가 설계
+            switch(state.aiLevel) {
+                case 1: return { speed: CONST.AI_SPEED, hp: 100, fireRate: 2500, accuracy: 4.2, range: 40, reactionTime: 1.2 };
+                case 2: return { speed: CONST.AI_SPEED * 1.05, hp: 110, fireRate: 2100, accuracy: 3.5, range: 45, reactionTime: 1.0 };
+                case 3: return { speed: CONST.AI_SPEED * 1.10, hp: 125, fireRate: 1700, accuracy: 2.8, range: 50, reactionTime: 0.8 };
+                case 4: return { speed: CONST.AI_SPEED * 1.15, hp: 140, fireRate: 1300, accuracy: 2.1, range: 60, reactionTime: 0.65 };
+                case 5: return { speed: CONST.AI_SPEED * 1.20, hp: 160, fireRate: 1000, accuracy: 1.7, range: 70, reactionTime: 0.5 };
+                case 6: return { speed: CONST.AI_SPEED * 1.25, hp: 180, fireRate: 850,  accuracy: 1.4, range: 75, reactionTime: 0.4 };
+                case 7: return { speed: CONST.AI_SPEED * 1.30, hp: 200, fireRate: 700,  accuracy: 1.1, range: 85, reactionTime: 0.35 };
+                case 8: return { speed: CONST.AI_SPEED * 1.35, hp: 220, fireRate: 550,  accuracy: 0.8, range: 95, reactionTime: 0.25 };
+            }
+        }
+
+        // 아군 AI는 중견 레벨로 보강
+        function getTeammateStats() {
+            return { speed: CONST.AI_SPEED, hp: 140, fireRate: 900, accuracy: 1.8, range: 65, reactionTime: 0.4 };
+        }
+
+        // Settings Modal Controls
+        function openSettings() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+            document.getElementById('player-name-input').value = state.playerName;
+            
+            // Render Roadmap
+            const track = document.getElementById('roadmap-track');
+            track.innerHTML = '';
+            
+            const currentRank = getRankInfo(state.trophies);
+            
+            RANKS_CONFIG.forEach(r => {
+                const isCurrent = r.name === currentRank.name;
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: ${isCurrent ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)'};
+                    padding: 12px 18px;
+                    border-radius: 12px;
+                    border: 1px solid ${isCurrent ? r.color : 'rgba(255,255,255,0.1)'};
+                    box-shadow: ${isCurrent ? '0 0 10px ' + r.color : 'none'};
+                `;
+                
+                card.innerHTML = `
+                    <div>
+                        <div style="font-family: 'Black Han Sans', sans-serif; font-size: 16px; color: ${r.color};">
+                            ${r.name} ${isCurrent ? '⭐ (달성)' : ''}
+                        </div>
+                        <div style="font-size: 12px; color: #bbb; margin-top: 3px;">${r.desc}</div>
+                    </div>
+                    <div style="font-family: 'Black Han Sans', sans-serif; font-size: 14px; color: #fff;">
+                        🏆 ${r.min === 701 ? '701+' : r.min + ' - ' + r.max}
+                    </div>
+                `;
+                track.appendChild(card);
+            });
+
+            // Update Progress Percentage
+            const maxCap = 701;
+            const pct = Math.min(100, (state.trophies / maxCap) * 100);
+            document.getElementById('roadmap-progress-bar').style.width = `${pct}%`;
+            document.getElementById('modal-current-rank').innerText = currentRank.name;
+            document.getElementById('modal-current-rank').style.color = currentRank.color;
+            document.getElementById('modal-current-trophies').innerText = state.trophies;
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.add('hidden');
+            document.getElementById('menu-trophies').innerText = state.trophies;
+            document.getElementById('preview-trophies-above').innerText = `🏆 ${state.trophies}`;
+            document.getElementById('preview-name-below').innerText = state.playerName;
+            getAIStats();
+        }
+
+        // Damage Text Spawn Helper
+        function spawnDamageText(pos3D, text, color = "#ff4444") {
+            const el = document.createElement('div');
+            el.innerText = text;
+            el.style.position = 'absolute';
+            el.style.fontFamily = "'Black Han Sans', sans-serif";
+            el.style.fontSize = '26px';
+            el.style.color = color;
+            el.style.textShadow = '2px 2px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000';
+            el.style.transform = 'translate(-50%, -50%)';
+            el.style.pointerEvents = 'none';
+            document.getElementById('damage-container').appendChild(el);
+            
+            const offsetPos = pos3D.clone().add(new THREE.Vector3((Math.random()-0.5)*1.2, 1.8 + Math.random()*0.4, (Math.random()-0.5)*1.2));
+            floatingTexts.push({
+                el: el,
+                pos: offsetPos,
+                velY: 0.05,
+                life: 50,
+                maxLife: 50
+            });
+        }
+
+        // 3D Scene Build
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(CONST.COLORS.SKY);
+        scene.fog = new THREE.Fog(CONST.COLORS.SKY, 20, 120);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.getElementById('game-container').appendChild(renderer.domElement);
+
+        // Preview Scene (MainMenu)
+        const previewScene = new THREE.Scene();
+        const previewCamera = new THREE.PerspectiveCamera(45, 400/500, 0.1, 100);
+        previewCamera.position.set(0, 1.5, 4);
+        previewCamera.lookAt(0, 1, 0);
+        const previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        previewRenderer.setSize(400, 500);
+        document.getElementById('character-preview').appendChild(previewRenderer.domElement);
+
+        const pLight1 = new THREE.AmbientLight(0xffffff, 0.8);
+        previewScene.add(pLight1);
+        const pLight2 = new THREE.DirectionalLight(0xffffff, 1);
+        pLight2.position.set(5, 5, 5);
+        previewScene.add(pLight2);
+
+        let menuChar;
+        const createCharMesh = (color) => {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.8, 16), new THREE.MeshStandardMaterial({ color }));
+            body.position.y = 0.9;
+            group.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
+            head.position.y = 2.0;
+            group.add(head);
+            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.2), new THREE.MeshStandardMaterial({ color: 0x222 }));
+            gun.position.set(0.5, 1.2, 0.6);
+            group.add(gun);
+            return group;
+        };
+
+        function updatePreviewColor() {
+            if(menuChar) previewScene.remove(menuChar);
+            menuChar = createCharMesh(state.skinColor);
+            previewScene.add(menuChar);
+        }
+        updatePreviewColor();
+
+        const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambient);
+        const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+        sun.position.set(30, 100, 30);
+        sun.castShadow = true;
+        scene.add(sun);
+
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(300, 300),
+            new THREE.MeshStandardMaterial({ color: 0x555555 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        scene.add(new THREE.GridHelper(300, 60, 0x444444, 0x333333));
+
+        let units = [];
+        let walls = [];
+        let bullets = [];
+        let pickups = [];
+        let particles = [];
+        const keys = {};
+
+        let pitch = 0, yaw = 0;
+        document.body.addEventListener('click', () => { if (state.isPlaying) document.body.requestPointerLock(); });
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === document.body && state.player && !state.player.dead) {
+                yaw -= e.movementX * 0.0025;
+                pitch -= e.movementY * 0.0025;
+                pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, pitch));
+                camera.rotation.order = "YXZ";
+                camera.rotation.x = pitch; camera.rotation.y = yaw;
+            }
+        });
+
+        class Unit {
+            constructor(x, z, team, isPlayer = false, name = "AI", customColor = null) {
+                this.isPlayer = isPlayer;
+                this.team = team;
+                this.name = name;
+                
+                // 연습장 더미 세팅 여부
+                this.isDummy = !isPlayer && state.mode === 'PRACTICE';
+
+                // AI 지능 보완을 위한 무작위 역할 분담 (돌격형 vs 저격형 vs 일반형)
+                this.archetype = 'standard';
+                if (!isPlayer && !this.isDummy) {
+                    const roll = Math.random();
+                    if (roll < 0.35) this.archetype = 'melee';    // 빠른 접근형, 연사력이 높음
+                    else if (roll < 0.65) this.archetype = 'sniper'; // 멀리서 정확하게 공격
+                }
+
+                if (isPlayer) {
+                    this.aiStats = null;
+                    this.maxHp = CONST.PLAYER_HP;
+                } else if (state.mode === 'TEAM' && team === 'blue') {
+                    this.aiStats = getTeammateStats();
+                    this.maxHp = this.aiStats.hp;
+                } else if (this.isDummy) {
+                    // 무해한 훈련장 전용 더미 스탯
+                    this.aiStats = { speed: CONST.AI_SPEED * 0.4, hp: 150, fireRate: 99999, accuracy: 10, range: 0, reactionTime: 999 };
+                    this.maxHp = 150;
+                } else {
+                    this.aiStats = getAIStats();
+                    this.maxHp = this.aiStats.hp;
+                }
+
+                // 역할에 따른 스탯 가중치 세부 조정 (일반 대결 AI만)
+                if (!isPlayer && !this.isDummy) {
+                    if (this.archetype === 'melee') {
+                        this.aiStats.speed = CONST.AI_SPEED * 1.3;
+                        this.aiStats.fireRate = Math.floor(this.aiStats.fireRate * 0.7);
+                        this.aiStats.accuracy = Math.min(4.5, this.aiStats.accuracy * 1.4); 
+                        this.aiStats.range = 25;
+                    } else if (this.archetype === 'sniper') {
+                        this.aiStats.speed = CONST.AI_SPEED * 0.85;
+                        this.aiStats.fireRate = Math.floor(this.aiStats.fireRate * 1.4);
+                        this.aiStats.accuracy = Math.max(0.6, this.aiStats.accuracy * 0.5); 
+                        this.aiStats.range = 80;
+                    }
+                }
+                
+                this.hp = this.maxHp;
+                this.dead = false;
+                this.currentWeapon = 'ak';
+                this.ammo = { ak: CONST.AK_AMMO, cannon: 0 };
+                this.lastShot = 0;
+                this.radius = 0.8;
+                this.pos = new THREE.Vector3(x, 0, z);
+                this.vel = new THREE.Vector3(0, 0, 0);
+                this.onGround = false;
+
+                // 회복 로직
+                this.lastHitTime = 0;
+                this.nextHealTime = 0;
+
+                this.aiState = 'PATROL'; 
+                this.target = null;
+                this.patrolTarget = new THREE.Vector3();
+                this.lastThoughtTime = 0;
+                this.stuckTimer = 0;
+                
+                // 엄폐 회피 관련 상태 변수 추가
+                this.lastDamageTime = 0;
+                this.evadingTimer = 0;
+
+                this.mesh = new THREE.Group();
+                this.mesh.position.copy(this.pos);
+
+                let color;
+                if (isPlayer) {
+                    color = (state.mode === 'SOLO' || state.mode === 'PRACTICE') ? state.skinColor : CONST.COLORS.TEAMMATE;
+                } else if (this.isDummy) {
+                    color = 0xf39c12; // 훈련소 더미는 주황빛 컬러로 통일
+                } else {
+                    if (state.mode === 'TEAM') {
+                        if (team === 'blue') {
+                            color = CONST.COLORS.TEAMMATE;
+                        } else {
+                            color = (this.archetype === 'melee') ? 0xff5e62 : ((this.archetype === 'sniper') ? 0x9b59b6 : CONST.COLORS.ENEMY);
+                        }
+                    } else {
+                        color = (this.archetype === 'melee') ? 0xff5e62 : ((this.archetype === 'sniper') ? 0x9b59b6 : CONST.COLORS.ENEMY);
+                        if (customColor) color = customColor; 
+                    }
+                }
+
+                if (!isPlayer) {
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.8, 12), new THREE.MeshStandardMaterial({ color }));
+                    body.position.y = 0.9;
+                    body.castShadow = true;
+                    this.mesh.add(body);
+
+                    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: this.isDummy ? 0x2c3e50 : 0xffdbac }));
+                    head.position.y = 2.0;
+                    this.mesh.add(head);
+
+                    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.2), new THREE.MeshStandardMaterial({ color: 0x222 }));
+                    gun.position.set(0.5, 1.2, 0.6);
+                    this.mesh.add(gun);
+                } else {
+                    this.weaponMesh = new THREE.Group();
+                    const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.9), new THREE.MeshStandardMaterial({ color: 0x333 }));
+                    gunBody.position.set(0.35, -0.4, -0.6);
+                    this.weaponMesh.add(gunBody);
+                    camera.add(this.weaponMesh);
+                    scene.add(camera);
+                }
+
+                scene.add(this.mesh);
+                this.setNewPatrolPoint();
+            }
+
+            setNewPatrolPoint() {
+                this.patrolTarget.set((Math.random()-0.5)*260, 0, (Math.random()-0.5)*260);
+                this.stuckTimer = 0;
+            }
+
+            takeDamage(dmg, attacker) {
+                if (this.dead) return;
+                if (attacker && state.mode === 'TEAM' && attacker.team === this.team && attacker !== this) return;
+
+                this.hp -= dmg;
+                this.lastHitTime = Date.now();
+                this.lastDamageTime = Date.now(); 
+
+                if(this.isPlayer) {
+                    const overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,0,0,0.2);pointer-events:none;z-index:99;';
+                    document.body.appendChild(overlay); setTimeout(() => overlay.remove(), 80);
+                    
+                    // 피격 화면 진동
+                    screenShake = Math.max(screenShake, 0.35);
+                    this.updateUI();
+                } else {
+                    if (attacker && attacker.isPlayer) showHitMarker();
+                }
+
+                // AI 인텔리전트 상태 변화 (훈련용 표적 더미는 공격 반응 패스)
+                if (!this.isPlayer && !this.isDummy) {
+                    this.evadingTimer = 60; 
+                    if (attacker && !attacker.dead) {
+                        this.target = attacker;
+                        this.aiState = 'ATTACK';
+                    }
+                }
+
+                if (this.hp <= 0) this.die(attacker);
+            }
+
+            updateUI() {
+                const pct = Math.max(0, this.hp / this.maxHp);
+                document.getElementById('health-bar').style.width = `${pct * 100}%`;
+                document.getElementById('health-text').innerText = `${Math.ceil(this.hp)} / ${this.maxHp}`;
+                document.getElementById('ammo-ak').innerText = this.ammo.ak;
+                document.getElementById('ammo-cannon').innerText = this.ammo.cannon;
+                document.getElementById('slot-cannon').style.opacity = this.ammo.cannon > 0 ? "1" : "0.5";
+            }
+
+            shoot(targetDir) {
+                if (this.dead || this.isDummy) return;
+                const now = Date.now();
+                
+                // 대포 발사 속도 딜레이 증가로 육중함 체감 조정
+                const rate = this.isPlayer ? (this.currentWeapon === 'cannon' ? 1500 : (this.currentWeapon === 'ak' ? 110 : 350)) : this.aiStats.fireRate;
+                if (now - this.lastShot < rate) return;
+
+                if (this.currentWeapon !== 'pistol' && this.ammo[this.currentWeapon] <= 0) {
+                    if (this.isPlayer) this.switchWeapon('pistol');
+                    else this.currentWeapon = 'pistol';
+                    return;
+                }
+
+                this.lastShot = now;
+                if (this.currentWeapon !== 'pistol') this.ammo[this.currentWeapon]--;
+                
+                if (this.isPlayer) {
+                    this.updateUI();
+                    
+                    // 총기 격발 반동 연출 (대포일 때 특히 더 거대한 밀쳐짐)
+                    if (this.currentWeapon === 'cannon') {
+                        screenShake = Math.max(screenShake, 0.65);
+                        this.weaponMesh.position.z += 0.4;
+                        setTimeout(() => this.weaponMesh.position.z -= 0.4, 150);
+                        
+                        // 물리적인 넉백 효과 추가
+                        const fwd = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+                        this.vel.x -= fwd.x * 0.45;
+                        this.vel.z -= fwd.z * 0.45;
+                    } else if (this.currentWeapon === 'ak') {
+                        screenShake = Math.max(screenShake, 0.08);
+                        this.weaponMesh.position.z += 0.12;
+                        setTimeout(() => this.weaponMesh.position.z -= 0.12, 40);
+                    } else {
+                        screenShake = Math.max(screenShake, 0.04);
+                        this.weaponMesh.position.z += 0.08;
+                        setTimeout(() => this.weaponMesh.position.z -= 0.08, 60);
+                    }
+                }
+
+                const origin = this.isPlayer ? camera.position.clone() : this.mesh.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+                let dir = targetDir.clone();
+                if (!this.isPlayer) {
+                    const err = this.aiStats.accuracy * 0.04;
+                    dir.x += (Math.random()-0.5)*err; dir.y += (Math.random()-0.5)*err; dir.z += (Math.random()-0.5)*err;
+                    dir.normalize();
+                }
+                bullets.push(new Bullet(origin, dir, this, this.currentWeapon));
+            }
+
+            switchWeapon(type) {
+                this.currentWeapon = type;
+                if (this.isPlayer) {
+                    document.querySelectorAll('.weapon-slot').forEach(s => s.classList.remove('active'));
+                    document.getElementById(`slot-${type}`).classList.add('active');
+                }
+            }
+
+            die(attacker) {
+                this.dead = true; this.mesh.visible = false;
+                createExplosion(this.mesh.position.clone().add(new THREE.Vector3(0,1,0)), 20, 0xff0000);
+                
+                if (state.mode === 'PRACTICE') {
+                    // 연습장 모드: 점수 변동 없음, 단지 처치 알림 로그만 생성 및 빠른 부활
+                    logMsg(`${attacker ? attacker.name : '시스템'} ➔ ${this.name} 처치`);
+                    setTimeout(() => this.respawn(), 1500);
+                } else if (state.mode === 'TEAM') {
+                    if (this.team === 'blue') state.scores.red++; else state.scores.blue++;
+                    updateHUD();
+                    logMsg(`${attacker ? attacker.name : '시스템'} ➔ ${this.name}`);
+                    setTimeout(() => this.respawn(), 4000);
+                } else {
+                    state.aliveCount--; updateHUD();
+                    logMsg(`${this.name} 탈락! (${state.aliveCount}명 생존)`);
+                    if (this.isPlayer) { state.myRank = state.aliveCount + 1; setTimeout(endGame, 1500); }
+                    else if (state.aliveCount === 1 && !state.player.dead) { state.myRank = 1; setTimeout(endGame, 1500); }
+                }
+            }
+
+            respawn() {
+                if (!state.isPlaying) return;
+                this.dead = false; 
+                this.hp = this.maxHp;
+                this.ammo.ak = CONST.AK_AMMO; this.mesh.visible = true;
+                
+                const safePos = getSafeSpawnPos();
+                this.pos.copy(safePos);
+                
+                this.mesh.position.copy(this.pos);
+                if (this.isPlayer) this.updateUI();
+                this.setNewPatrolPoint();
+            }
+
+            updateHealth() {
+                if(this.dead) return;
+                const now = Date.now();
+                if (this.hp < this.maxHp && (now - this.lastHitTime > 5000)) {
+                    if (now > this.nextHealTime) {
+                        this.hp = Math.min(this.maxHp, this.hp + 10);
+                        if (this.isPlayer) this.updateUI();
+                        this.nextHealTime = now + 2000;
+                    }
+                }
+            }
+
+            updatePhysics() {
+                if (this.dead) return;
+                this.updateHealth();
+
+                this.vel.y -= CONST.GRAVITY;
+                const nextPos = this.pos.clone().add(this.vel);
+                if (nextPos.y <= 0) { nextPos.y = 0; this.vel.y = 0; this.onGround = true; } else { this.onGround = false; }
+
+                let hitWall = false;
+                for (let wall of walls) {
+                    const box = new THREE.Box3().setFromObject(wall);
+                    if (box.intersectsSphere(new THREE.Sphere(new THREE.Vector3(nextPos.x, 1, nextPos.z), this.radius))) { hitWall = true; break; }
+                }
+                if (Math.abs(nextPos.x) > 145 || Math.abs(nextPos.z) > 145) hitWall = true;
+
+                if (!hitWall) {
+                    this.pos.copy(nextPos);
+                } else {
+                    if (!this.isPlayer) {
+                        this.stuckTimer += 10;
+                        if (this.stuckTimer > 50) this.setNewPatrolPoint();
+                    }
+                }
+
+                if (this.isPlayer) camera.position.copy(this.pos).add(new THREE.Vector3(0, 1.7, 0));
+                else this.mesh.position.copy(this.pos);
+            }
+
+            think() {
+                if (this.isPlayer || this.dead) return;
+                
+                // 연습장 더미 표적: 공격성 제로, 제자리 고정 혹은 단순 순찰만 돌며 연습 표적이 되어줌
+                if (this.isDummy) {
+                    if (Math.random() < 0.005) {
+                        this.setNewPatrolPoint();
+                    }
+                    const dirToPatrol = new THREE.Vector3().subVectors(this.patrolTarget, this.pos).normalize();
+                    this.mesh.lookAt(this.patrolTarget.x, this.pos.y, this.patrolTarget.z);
+                    this.vel.x += dirToPatrol.x * this.aiStats.speed * 0.5;
+                    this.vel.z += dirToPatrol.z * this.aiStats.speed * 0.5;
+                    this.vel.x *= 0.85; this.vel.z *= 0.85;
+                    return;
+                }
+
+                const now = Date.now();
+                if (now - this.lastThoughtTime < this.aiStats.reactionTime * 1000) return;
+                this.lastThoughtTime = now;
+
+                if (this.evadingTimer > 0) this.evadingTimer--;
+
+                let closest = null, minDist = Infinity;
+                units.forEach(u => {
+                    if (u === this || u.dead) return;
+                    if (state.mode === 'TEAM' && u.team === this.team) return;
+                    const d = this.pos.distanceTo(u.pos);
+                    if (d < minDist) { minDist = d; closest = u; }
+                });
+
+                if (closest && minDist < this.aiStats.range) {
+                    this.target = closest;
+                    this.aiState = 'ATTACK';
+                } else if (!this.target || this.target.dead) {
+                    if (closest && Math.random() < 0.3) {
+                        this.patrolTarget.copy(closest.pos).add(new THREE.Vector3((Math.random()-0.5)*10, 0, (Math.random()-0.5)*10));
+                    }
+                    this.aiState = 'PATROL';
+                }
+
+                // 엄폐/공격 이동 메커니즘
+                if (this.aiState === 'ATTACK' && this.target) {
+                    const dirToTarget = new THREE.Vector3().subVectors(this.target.pos, this.pos).normalize();
+                    this.mesh.lookAt(this.target.pos.x, this.pos.y, this.target.pos.z);
+
+                    // 회피 카운터 및 엄폐물 활용 이동
+                    if (this.evadingTimer > 0) {
+                        const rightVec = new THREE.Vector3().crossVectors(dirToTarget, new THREE.Vector3(0, 1, 0)).normalize();
+                        const dirSign = Math.sin(Date.now() * 0.01) > 0 ? 1 : -1;
+                        this.vel.x += rightVec.x * this.aiStats.speed * 1.5 * dirSign;
+                        this.vel.z += rightVec.z * this.aiStats.speed * 1.5 * dirSign;
+                        
+                        let nearestWall = null, wallDist = Infinity;
+                        walls.forEach(w => {
+                            const d = this.pos.distanceTo(w.position);
+                            if (d < wallDist) { wallDist = d; nearestWall = w; }
+                        });
+                        if (nearestWall && wallDist < 25) {
+                            const wallDir = new THREE.Vector3().subVectors(nearestWall.position, this.pos).normalize();
+                            this.vel.x += wallDir.x * this.aiStats.speed * 0.8;
+                            this.vel.z += wallDir.z * this.aiStats.speed * 0.8;
+                        }
+                    } else {
+                        // 병과(역할)별 포지셔닝 공격 무빙
+                        if (this.archetype === 'melee') {
+                            this.vel.x += dirToTarget.x * this.aiStats.speed * 1.1;
+                            this.vel.z += dirToTarget.z * this.aiStats.speed * 1.1;
+                        } else if (this.archetype === 'sniper') {
+                            if (minDist < 30) {
+                                this.vel.x -= dirToTarget.x * this.aiStats.speed * 1.2;
+                                this.vel.z -= dirToTarget.z * this.aiStats.speed * 1.2;
+                            } else if (minDist > 55) {
+                                this.vel.x += dirToTarget.x * this.aiStats.speed;
+                                this.vel.z += dirToTarget.z * this.aiStats.speed;
+                            } else {
+                                const side = new THREE.Vector3().crossVectors(dirToTarget, new THREE.Vector3(0,1,0)).normalize();
+                                this.vel.addScaledVector(side, this.aiStats.speed * 0.5);
+                            }
+                        } else {
+                            // Standard 무빙
+                            if (minDist > 15) {
+                                this.vel.x += dirToTarget.x * this.aiStats.speed;
+                                this.vel.z += dirToTarget.z * this.aiStats.speed;
+                            } else if (minDist < 8) {
+                                this.vel.x -= dirToTarget.x * this.aiStats.speed;
+                                this.vel.z -= dirToTarget.z * this.aiStats.speed;
+                            } else {
+                                const side = new THREE.Vector3().crossVectors(dirToTarget, new THREE.Vector3(0,1,0)).normalize();
+                                this.vel.addScaledVector(side, this.aiStats.speed * 0.6);
+                            }
+                        }
+                    }
+
+                    if (this.onGround && Math.random() < 0.08) this.vel.y = CONST.JUMP_FORCE;
+                    this.shoot(dirToTarget);
+                } else if (this.aiState === 'PATROL') {
+                    if (this.pos.distanceTo(this.patrolTarget) < 5) this.setNewPatrolPoint();
+                    const dirToPatrol = new THREE.Vector3().subVectors(this.patrolTarget, this.pos).normalize();
+                    this.mesh.lookAt(this.patrolTarget.x, this.pos.y, this.patrolTarget.z);
+                    this.vel.x += dirToPatrol.x * this.aiStats.speed * 1.1;
+                    this.vel.z += dirToPatrol.z * this.aiStats.speed * 1.1;
+                }
+
+                this.vel.x *= 0.85; this.vel.z *= 0.85;
+            }
+        }
+
+        class Bullet {
+            constructor(pos, dir, owner, type) {
+                this.pos = pos; this.dir = dir; this.owner = owner; this.type = type;
+                this.life = type === 'cannon' ? 180 : 120; 
+                this.speed = type === 'cannon' ? 0.7 : 2.5;
+                this.dmg = type === 'cannon' ? 85 : (type === 'ak' ? 18 : 22);
+                
+                // 탄도학을 위해 대포일 때 발사 초기 시점의 속도 벡터 보관
+                if (type === 'cannon') {
+                    this.velocity = dir.clone().multiplyScalar(this.speed);
+                }
+
+                const color = type === 'cannon' ? 0xff4400 : 0xffcc00;
+                this.mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(type === 'cannon' ? 0.45 : 0.08, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: color })
+                );
+                this.mesh.position.copy(pos); scene.add(this.mesh);
+            }
+            
+            update() {
+                if (this.type === 'cannon') {
+                    // 포물선 궤적 탄도학 물리 연출 적용 (중력 강하 작용)
+                    this.velocity.y -= 0.007; 
+                    this.mesh.position.add(this.velocity);
+                } else {
+                    this.mesh.position.addScaledVector(this.dir, this.speed);
+                }
+                
+                this.life--;
+                
+                // 지면과의 충돌
+                if (this.mesh.position.y <= 0.1) {
+                    if (this.type === 'cannon') this.explode(); 
+                    else createImpactParticles(this.mesh.position, 0xaaaaaa); 
+                    this.destroy(); return true;
+                }
+
+                // 벽과의 충돌
+                for (let wall of walls) {
+                    if (new THREE.Box3().setFromObject(wall).containsPoint(this.mesh.position)) {
+                        if (this.type === 'cannon') this.explode(); 
+                        else createImpactParticles(this.mesh.position, 0x999999); 
+                        this.destroy(); return true;
+                    }
+                }
+
+                // 피격 연출 및 물리 타격 피드백
+                for (let unit of units) {
+                    if (unit === this.owner || unit.dead) continue;
+                    if (state.mode === 'TEAM' && unit.team === this.owner.team) continue;
+
+                    const uPos = unit.isPlayer ? camera.position.clone().sub(new THREE.Vector3(0,0.4,0)) : unit.mesh.position.clone().add(new THREE.Vector3(0, 1, 0));
+                    if (this.mesh.position.distanceTo(uPos) < 1.4) {
+                        if (this.type === 'cannon') {
+                            this.explode();
+                        } else {
+                            unit.takeDamage(this.dmg, this.owner);
+                            const isAttackerPlayer = this.owner && this.owner.isPlayer;
+                            spawnDamageText(unit.isPlayer ? camera.position : unit.mesh.position, Math.round(this.dmg), isAttackerPlayer ? "#ffea00" : "#ff3333");
+                            createImpactParticles(this.mesh.position, 0xff0000); 
+                        }
+                        this.destroy(); return true;
+                    }
+                }
+                
+                if (this.life <= 0) { this.destroy(); return true; } return false;
+            }
+
+            explode() {
+                createExplosion(this.mesh.position, 25, 0xff5500);
+                
+                units.forEach(u => {
+                    if (u.dead) return;
+                    if (state.mode === 'TEAM' && u.team === this.owner.team) return;
+                    const p = u.isPlayer ? camera.position : u.mesh.position;
+                    const d = p.distanceTo(this.mesh.position);
+                    if (d < 8) {
+                        const falloff = (8 - d) / 8;
+                        const actualDmg = this.dmg * falloff;
+                        u.takeDamage(actualDmg, this.owner);
+                        
+                        spawnDamageText(u.isPlayer ? camera.position : u.mesh.position, Math.round(actualDmg), (this.owner && this.owner.isPlayer) ? "#ff9900" : "#ff3333");
+                    }
+                });
+            }
+            destroy() { scene.remove(this.mesh); }
+        }
+
+        class Pickup {
+            constructor(x, z, type) {
+                this.type = type;
+                const color = type === 'cannon' ? 0xff4400 : 0x2ecc71;
+                this.mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshStandardMaterial({ color: color, emissive: 0x111111 }));
+                this.mesh.position.set(x, 1, z); scene.add(this.mesh);
+            }
+            update() {
+                this.mesh.rotation.y += 0.04; this.mesh.position.y = 1 + Math.sin(Date.now()*0.006)*0.3;
+                for (let u of units) {
+                    if (!u.dead && u.isPlayer && u.pos.distanceTo(this.mesh.position) < 2.5) {
+                        if (this.type === 'cannon') {
+                            u.ammo.cannon = CONST.CANNON_AMMO; 
+                            u.switchWeapon('cannon');
+                            logMsg("🚀 대포 특수탄 확보!"); 
+                        } else {
+                            u.ammo.ak += 45;
+                            if(u.currentWeapon === 'ak') u.updateUI();
+                            logMsg("🔫 AK-47 탄환 재보급!");
+                        }
+                        scene.remove(this.mesh); return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        function buildMap() {
+            walls.forEach(w => scene.remove(w)); walls = [];
+            const addWall = (x, z, w, h, d) => {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: CONST.COLORS.WALL }));
+                m.position.set(x, h/2, z); m.castShadow = true; m.receiveShadow = true;
+                scene.add(m); walls.push(m);
+            };
+            addWall(0, -150, 300, 12, 5); addWall(0, 150, 300, 12, 5);
+            addWall(-150, 0, 5, 12, 300); addWall(150, 0, 5, 12, 300);
+            for(let i=0; i<45; i++) {
+                const x = (Math.random()-0.5)*260, z = (Math.random()-0.5)*260;
+                if (Math.abs(x)<20 && Math.abs(z)<20) continue;
+                addWall(x, z, 4+Math.random()*12, 4+Math.random()*8, 4+Math.random()*12);
+            }
+        }
+
+        function spawnPickup(type) {
+            const x = (Math.random()-0.5)*260, z = (Math.random()-0.5)*260;
+            let ok = true;
+            for(let w of walls) if(new THREE.Box3().setFromObject(w).containsPoint(new THREE.Vector3(x,1,z))) ok = false;
+            if(ok) pickups.push(new Pickup(x, z, type));
+        }
+
+        function getSafeSpawnPos() {
+            let attempts = 0;
+            let pos = new THREE.Vector3();
+            while(attempts < 50) {
+                const r = 50 + Math.random() * 80;
+                const a = Math.random() * Math.PI * 2;
+                pos.set(Math.cos(a)*r, 5, Math.sin(a)*r);
+                let collision = false;
+                for(let w of walls) {
+                     const box = new THREE.Box3().setFromObject(w);
+                     box.expandByScalar(3); 
+                     if(box.containsPoint(new THREE.Vector3(pos.x, 1, pos.z))) {
+                         collision = true; break;
+                     }
+                }
+                if(!collision) return pos;
+                attempts++;
+            }
+            return pos;
+        }
+
+        function startGame(mode) {
+            saveProfile(); 
+            
+            state.mode = mode; 
+            state.isPlaying = true; 
+            state.timeLeft = (mode === 'TEAM') ? 120 : 180; // TDM은 120초 단축 적용
+            state.scores = { blue: 0, red: 0 }; 
+            state.aliveCount = 10;
+            
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('game-over').classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            document.getElementById('msg-log').innerHTML = '';
+            document.getElementById('settings-btn').style.display = 'none'; // 대전 중엔 설정 기어 숨김
+            document.getElementById('quit-practice-btn').classList.add('hidden');
+
+            buildMap();
+            units.forEach(u => { scene.remove(u.mesh); if(u.weaponMesh) camera.remove(u.weaponMesh); });
+            units = []; bullets.forEach(b => scene.remove(b.mesh)); bullets = [];
+            pickups.forEach(p => scene.remove(p.mesh)); pickups = [];
+
+            // 플레이어 소환
+            const pPos = getSafeSpawnPos();
+            state.player = new Unit(pPos.x, pPos.z, 'blue', true, state.playerName);
+            units.push(state.player); state.player.updateUI();
+
+            // 상단 HUD 노출 분기 제어
+            if (mode === 'PRACTICE') {
+                // [연습소 / 훈련장 전용 세팅]
+                document.getElementById('left-score-box').classList.add('hidden');
+                document.getElementById('timer-box').classList.add('hidden'); // 타이머 숨김
+                document.getElementById('right-score-box').innerHTML = `<span style="color:#f1c40f;">자유 훈련 구역</span>`;
+                document.getElementById('quit-practice-btn').classList.remove('hidden'); // 나갈 수 있는 종료 버튼 노출
+                
+                // 연습 표적 더미 6개 소환
+                for (let i = 1; i <= 6; i++) {
+                    const safe = getSafeSpawnPos();
+                    units.push(new Unit(safe.x, safe.z, 'red', false, `연습 더미 ${i}`));
+                }
+
+                logMsg("🎯 훈련소에 입장했습니다! 자유롭게 무기를 테스트해보세요.");
+                logMsg("💡 ESC키를 눌러 마우스 잠금 해제 후 [연습 종료]를 클릭해 나갈 수 있습니다.");
+            } else if (mode === 'SOLO') {
+                // [개인전 (배틀로얄) 전용 세팅]
+                document.getElementById('left-score-box').classList.add('hidden');
+                document.getElementById('timer-box').classList.add('hidden'); // 개인전 상단 타이머 숨김 요청 반영
+                document.getElementById('right-score-box').innerHTML = `생존: <span id="alive-count">10</span>`;
+                
+                for(let i=1; i<10; i++) {
+                    const safe = getSafeSpawnPos();
+                    units.push(new Unit(safe.x, safe.z, `solo_${i}`, false, `생존자 ${i}`));
+                }
+            } else {
+                // [팀 데스매치 전용 세팅]
+                document.getElementById('left-score-box').classList.remove('hidden');
+                document.getElementById('timer-box').classList.remove('hidden'); // 팀데 타이머 노출
+                document.getElementById('right-score-box').innerHTML = `적팀: <span id="enemy-score" class="enemy-score">0</span>`;
+                
+                updateHUD();
+                
+                for(let i=1; i<10; i++) {
+                    const team = (i >= 5) ? 'red' : 'blue';
+                    const name = (team === 'blue' ? `아군 ${i}` : `적군 ${i-4}`);
+                    const safe = getSafeSpawnPos();
+                    units.push(new Unit(safe.x, safe.z, team, false, name));
+                }
+            }
+
+            if(state.timerId) clearInterval(state.timerId);
+            state.timerId = setInterval(() => {
+                if(!state.isPlaying) return;
+                
+                // 탄환 및 무기 아이템 자동 무작위 드롭
+                const r = Math.random();
+                if(r < 0.035) spawnPickup('cannon');
+                else if (r < 0.12) spawnPickup('ak');
+
+                // 팀데스매치 실시간 시간 계산
+                if(state.mode === 'TEAM') {
+                    state.timeLeft--; 
+                    const m = Math.floor(state.timeLeft/60), s = state.timeLeft%60;
+                    document.getElementById('timer').innerText = `${m}:${s<10?'0'+s:s}`;
+                    if(state.timeLeft <= 0) endGame();
+                }
+            }, 1000);
+        }
+
+        function updateHUD() {
+            if(state.mode === 'TEAM') {
+                document.getElementById('my-score').innerText = state.scores.blue;
+                document.getElementById('enemy-score').innerText = state.scores.red;
+            } else if (state.mode === 'SOLO') {
+                const el = document.getElementById('alive-count'); if(el) el.innerText = state.aliveCount;
+            }
+        }
+
+        // 연습장 나가기 핸들러
+        function quitPractice() {
+            state.isPlaying = false;
+            clearInterval(state.timerId);
+            document.exitPointerLock();
+            
+            document.getElementById('ui-layer').classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+            document.getElementById('settings-btn').style.display = 'flex';
+            document.getElementById('quit-practice-btn').classList.add('hidden');
+            
+            // 모든 파편물 및 객체 소거
+            units.forEach(u => { scene.remove(u.mesh); if(u.weaponMesh) camera.remove(u.weaponMesh); });
+            units = []; 
+            bullets.forEach(b => scene.remove(b.mesh)); bullets = [];
+            pickups.forEach(p => scene.remove(p.mesh)); pickups = [];
+            floatingTexts.forEach(t => t.el.remove()); floatingTexts = [];
+
+            showMainMenu();
+        }
+
+        function endGame() {
+            state.isPlaying = false; clearInterval(state.timerId); document.exitPointerLock();
+            document.getElementById('ui-layer').classList.add('hidden');
+            document.getElementById('game-over').classList.remove('hidden');
+            document.getElementById('settings-btn').style.display = 'flex'; 
+            
+            floatingTexts.forEach(t => t.el.remove());
+            floatingTexts = [];
+
+            const title = document.getElementById('result-title'), trophyText = document.getElementById('trophy-change'), details = document.getElementById('result-details');
+            let delta = 0;
+            
+            // 트로피 변경 개수 규칙 보존
+            if(state.mode === 'TEAM') {
+                if(state.scores.blue > state.scores.red) { title.innerText = "승리!"; title.style.color = "#3498db"; delta = 15; }
+                else if(state.scores.blue < state.scores.red) { title.innerText = "패배..."; title.style.color = "#e74c3c"; delta = -10; }
+                else { title.innerText = "무승부"; delta = 0; }
+                details.innerText = `최종 점수 ${state.scores.blue} : ${state.scores.red}`;
+            } else {
+                const rank = state.myRank || (state.player.dead ? state.aliveCount + 1 : 1);
+                const scoreTable = [30, 20, 15, 10, 5, 0, -5, -10, -15, -20];
+                delta = scoreTable[Math.min(rank - 1, 9)];
+                title.innerText = rank === 1 ? "CHAMPION!" : `${rank}위 기록`;
+                details.innerText = `최종 순위: ${rank}위`;
+            }
+            
+            state.trophies = Math.max(0, state.trophies + delta); 
+            localStorage.setItem('rank_trophies', state.trophies);
+            
+            trophyText.innerText = (delta >= 0 ? "+" : "") + delta;
+            trophyText.style.color = delta >= 0 ? "#2ecc71" : "#e74c3c";
+        }
+
+        function showMainMenu() {
+            document.getElementById('game-over').classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+            
+            document.getElementById('menu-trophies').innerText = state.trophies;
+            document.getElementById('preview-trophies-above').innerText = `🏆 ${state.trophies}`;
+            document.getElementById('preview-name-below').innerText = state.playerName;
+            getAIStats();
+        }
+
+        function showHitMarker() {
+            const el = document.getElementById('hit-marker'); el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 100);
+        }
+
+        function drawMinimap() {
+            const canvas = document.getElementById('minimap');
+            const ctx = canvas.getContext('2d');
+            const size = canvas.width;
+            const center = size / 2;
+            const range = 150; 
+            const scale = (size / 2) / range;
+
+            ctx.clearRect(0, 0, size, size);
+
+            if (!state.player) return;
+
+            // Background
+            ctx.beginPath();
+            ctx.arc(center, center, center - 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 20, 40, 0.5)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw Walls
+            ctx.fillStyle = 'rgba(180, 180, 180, 0.5)';
+            walls.forEach(w => {
+                const wx = w.position.x - state.player.pos.x;
+                const wz = w.position.z - state.player.pos.z;
+                
+                const mapX = center + wx * scale;
+                const mapY = center + wz * scale;
+                
+                const wWidth = w.geometry.parameters.width * scale;
+                const wDepth = w.geometry.parameters.depth * scale;
+
+                const dist = Math.sqrt(Math.pow(mapX - center, 2) + Math.pow(mapY - center, 2));
+                if (dist < center + 10) {
+                    ctx.fillRect(mapX - wWidth/2, mapY - wDepth/2, wWidth, wDepth);
+                }
+            });
+
+            // Draw Units
+            units.forEach(u => {
+                if(u.dead) return;
+                
+                const relX = (u.pos.x - state.player.pos.x);
+                const relZ = (u.pos.z - state.player.pos.z);
+                const mapX = center + relX * scale;
+                const mapY = center + relZ * scale;
+
+                const dist = Math.sqrt(Math.pow(mapX - center, 2) + Math.pow(mapY - center, 2));
+                if (dist < center - 4) {
+                    ctx.beginPath();
+                    if (u === state.player) {
+                        ctx.save();
+                        ctx.translate(center, center);
+                        ctx.rotate(-yaw); 
+                        ctx.moveTo(0, -6);
+                        ctx.lineTo(4, 4);
+                        ctx.lineTo(-4, 4);
+                        ctx.fillStyle = '#fff';
+                        ctx.fill();
+                        ctx.restore();
+                    } else {
+                        ctx.arc(mapX, mapY, 4, 0, Math.PI * 2);
+                        if (state.mode === 'TEAM') {
+                            ctx.fillStyle = u.team === state.player.team ? '#3498db' : '#e74c3c';
+                        } else if (u.isDummy) {
+                            ctx.fillStyle = '#f1c40f'; // 더미는 미니맵에 주황색 점 노출
+                        } else {
+                            ctx.fillStyle = '#e74c3c';
+                        }
+                        ctx.fill();
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase(); keys[k] = true;
+            if(state.player && !state.player.dead) {
+                if(e.key === '1') state.player.switchWeapon('pistol');
+                if(e.key === '2') state.player.switchWeapon('ak');
+                if(e.key === '3') state.player.switchWeapon('cannon');
+                if(e.key === ' ') state.player.shooting = true;
+                if(e.key === 'Enter' && state.player.onGround) state.player.vel.y = CONST.JUMP_FORCE;
+            }
+        });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase(); keys[k] = false;
+            if(state.player && e.key === ' ') state.player.shooting = false;
+        });
+
+        window.addEventListener('mousedown', () => { if(state.player) state.player.shooting = true; });
+        window.addEventListener('mouseup', () => { if(state.player) state.player.shooting = false; });
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!state.isPlaying) {
+                if(menuChar) menuChar.rotation.y += 0.01;
+                previewRenderer.render(previewScene, previewCamera);
+            } else {
+                const p = state.player;
+                if (p && !p.dead) {
+                    const fwd = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+                    const right = new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+                    if (keys['w']) { p.vel.x += fwd.x*0.1; p.vel.z += fwd.z*0.1; }
+                    if (keys['s']) { p.vel.x -= fwd.x*0.1; p.vel.z -= fwd.z*0.1; }
+                    if (keys['a']) { p.vel.x -= right.x*0.1; p.vel.z -= right.z*0.1; }
+                    if (keys['d']) { p.vel.x += right.x*0.1; p.vel.z += right.z*0.1; }
+                    p.vel.x *= 0.82; p.vel.z *= 0.82;
+
+                    if (p.shooting) p.shoot(camera.getWorldDirection(new THREE.Vector3()));
+                }
+
+                units.forEach(u => {
+                    u.updatePhysics();
+                    u.think();
+                });
+
+                bullets = bullets.filter(b => !b.update());
+                pickups = pickups.filter(p => !p.update());
+                particles = particles.filter(p => {
+                    p.m.position.add(p.v); p.v.y -= 0.02; p.l--;
+                    if(p.l<=0) { scene.remove(p.m); return false; } return true;
+                });
+
+                // 2D Damage Text projection update
+                floatingTexts = floatingTexts.filter(t => {
+                    t.life--;
+                    if (t.life <= 0) {
+                        t.el.remove();
+                        return false;
+                    }
+                    t.pos.y += t.velY;
+                    
+                    const tempV = t.pos.clone();
+                    tempV.project(camera);
+                    
+                    if (tempV.z > 1) {
+                        t.el.style.display = 'none';
+                    } else {
+                        t.el.style.display = 'block';
+                        const x = (tempV.x * 0.5 + 0.5) * window.innerWidth;
+                        const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
+                        t.el.style.left = `${x}px`;
+                        t.el.style.top = `${y}px`;
+                        t.el.style.opacity = t.life / t.maxLife;
+                        t.el.style.transform = `translate(-50%, -50%) scale(${1 + (t.maxLife - t.life) * 0.008})`;
+                    }
+                    return true;
+                });
+
+                // Camera Shake apply
+                if (screenShake > 0.005) {
+                    camera.position.x += (Math.random() - 0.5) * screenShake;
+                    camera.position.y += (Math.random() - 0.5) * screenShake;
+                    camera.position.z += (Math.random() - 0.5) * screenShake;
+                    screenShake *= 0.92; 
+                }
+
+                renderer.render(scene, camera);
+                drawMinimap();
+            }
+        }
+
+        function createExplosion(pos, count, color) {
+            for(let i=0; i<count; i++) {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(0.35,0.35,0.35), new THREE.MeshBasicMaterial({color}));
+                m.position.copy(pos);
+                const v = new THREE.Vector3((Math.random()-0.5)*0.7, Math.random()*0.7, (Math.random()-0.5)*0.7);
+                particles.push({m, v, l: 38}); scene.add(m);
+            }
+        }
+
+        function createImpactParticles(pos, color) {
+            for(let i=0; i<7; i++) {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,0.15), new THREE.MeshBasicMaterial({color}));
+                m.position.copy(pos);
+                const v = new THREE.Vector3((Math.random()-0.5)*0.3, Math.random()*0.4, (Math.random()-0.5)*0.3);
+                particles.push({m, v, l: 18}); scene.add(m);
+            }
+        }
+
+        function logMsg(txt) {
+            const log = document.getElementById('msg-log'); const div = document.createElement('div');
+            div.className = 'kill-msg'; div.innerText = txt; log.prepend(div);
+            setTimeout(() => div.remove(), 3500);
+        }
+
+        window.onload = () => { 
+            document.getElementById('menu-trophies').innerText = state.trophies; 
+            document.getElementById('preview-trophies-above').innerText = `🏆 ${state.trophies}`;
+            document.getElementById('preview-name-below').innerText = state.playerName;
+
+            getAIStats();
+
+            // Load skin select UI
+            const savedColor = state.skinColor;
+            const selector = document.querySelector(`.skin-option[data-color="${savedColor === 0x2ecc71 ? '#2ecc71' : '#' + savedColor.toString(16)}"]`);
+            if(selector) selector.classList.add('selected');
+            else {
+                const firstOpt = document.querySelector('.skin-option');
+                if(firstOpt) firstOpt.classList.add('selected');
+            }
+            
+            updatePreviewColor();
+            animate(); 
+        };
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
